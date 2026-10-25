@@ -1,0 +1,55 @@
+seed: 42
+
+paths:
+  raw: data/raw
+  interim: data/interim
+  processed: data/processed
+  models: data/models
+  reports: reports
+
+trips:
+  years: [2023, 2024, 2025, 2026]
+  url_template: https://opendata.toronto.ca/toronto.parking.authority/bike-share-toronto-ridership-data/bikeshare-ridership-{year}.zip
+
+weather:
+  # Toronto City Centre (Billy Bishop): hourly wind/visibility populated, unlike the OGC API station.
+  station_id: 48549
+  url_template: >-
+    https://climate.weather.gc.ca/climate_data/bulk_data_e.html?format=csv&stationID={station_id}&Year={year}&Month={month}&Day=1&timeframe=1&submit=Download+Data
+  # ECCC reports Local Standard Time (fixed UTC-5, no DST); trips use local wall-clock time.
+  source_utc_offset_hours: -5
+  local_timezone: America/Toronto
+
+cleaning:
+  min_duration_s: 60     # drop shorter trips that start and end at the same station (false starts)
+  max_duration_s: 86400  # drop trips longer than a day (lost/unreturned bikes)
+
+modeling:
+  last_hour: "2026-09-30 23:00"   # drop the Oct-1 tail rows
+  filter_end: "2026-01-01"        # station filter and tiers use data before this (2023-2025)
+  min_departures: 500              # station filter threshold (chosen on 2023-2025)
+  horizons: [1, 3]
+  gap_hours: 168                   # training targets end this long before a validation block
+  train_sample_frac: 0.25
+  deviance_eps: 1.0e-3
+  new_station_hours: 1344          # "new station" = less than 8 weeks of history at origin
+  folds:
+    - {name: f1, start: "2024-10-01", end: "2025-01-01"}
+    - {name: f2, start: "2025-01-01", end: "2025-04-01"}
+    - {name: f3, start: "2025-04-01", end: "2025-07-01"}
+    - {name: f4, start: "2025-07-01", end: "2025-10-01"}
+  final: {start: "2026-01-01", end: "2026-10-01", train_end: "2026-01-01"}
+  grid:
+    num_leaves: [31, 127]
+    n_estimators: [300, 600]
+  lgbm:
+    learning_rate: 0.05
+    min_data_in_leaf: 200
+    feature_fraction: 0.8
+    bagging_fraction: 0.8
+    bagging_freq: 1
+
+mlflow:
+  tracking_uri: mlruns
+  experiment: bikeshare-forecast
+
